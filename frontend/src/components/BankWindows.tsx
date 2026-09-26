@@ -749,7 +749,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
 
 // ── CANDLE CHART ──────────────────────────────────────────────────────────────
 
-export interface Candle { open: number; close: number; high: number; low: number; }
+interface Candle { open: number; close: number; high: number; low: number; }
 
 const CANDLE_COUNT = 28;
 const CANDLE_INTERVAL_MS = 2500;

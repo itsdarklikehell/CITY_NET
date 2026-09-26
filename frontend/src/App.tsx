@@ -36,7 +36,7 @@ import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWind
 import { BuildingPreview } from './components/BuildingPreview';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
-import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
+import { isShop, shopsAvailable } from './data/buildingTypes';
 import { HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';

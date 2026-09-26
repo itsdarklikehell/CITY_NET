@@ -9,8 +9,8 @@ import { DraggableWindow } from './DraggableWindow';
 // the NPC library - is laid out, navigated and themed the same way. What goes in the folders
 // is the caller's; this only arranges it.
 //
-// Everything is a theme variable, so it follows all seven themes; the solid title bar comes
-// from the `terminal-window` class in App.css.
+// Everything is a theme variable, so it follows all seven themes; the solid title bar is every
+// window's, from DraggableWindow.
 
 export interface TerminalFolder<Id extends string = string> {
   id: Id;
@@ -110,7 +110,6 @@ export function TerminalWindow<Id extends string>({
       setPos={setPos}
       onClose={onClose}
       titleControls={titleControls}
-      className="terminal-window"
       windowStyle={{ width, maxWidth: '96vw' }}
       contentStyle={{ maxHeight: 'none', padding: 12 }}
     >

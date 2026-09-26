@@ -17,17 +17,12 @@ interface DraggableWindowProps {
   notificationsEnabled?: boolean;
   onToggleNotifications?: () => void;
   titleControls?: React.ReactNode;
-  /**
-   * Extra classes on the window, for a window that wants a different look without every
-   * other window changing with it - the building window's terminal style is the first.
-   */
-  className?: string;
 }
 
 export function DraggableWindow({
   title, centerTitle, children, pos, setPos, onClose,
   windowStyle = {}, contentStyle = {},
-  notificationsEnabled, onToggleNotifications, titleControls, className,
+  notificationsEnabled, onToggleNotifications, titleControls,
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -114,7 +109,7 @@ export function DraggableWindow({
   return (
     <div
       ref={windowRef}
-      className={['win95-window', className, focused ? '' : 'inactive'].filter(Boolean).join(' ')}
+      className={focused ? 'win95-window' : 'win95-window inactive'}
       onMouseDownCapture={bringToFront}
       style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}
     >

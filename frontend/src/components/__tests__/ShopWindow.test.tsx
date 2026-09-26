@@ -232,8 +232,7 @@ describe('a ripperdoc', () => {
 
 describe('looking like the windows it opens from', () => {
   it('is a terminal window: BUY, SELL and CART down the left, the list on the right', async () => {
-    const { container } = show('ripperdoc');
-    expect(container.querySelector('.win95-window')).toHaveClass('terminal-window');
+    show('ripperdoc');
     const folders = within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab');
     expect(folders.map((f) => f.textContent)).toEqual(['BUY', 'SELL', 'CART']);
     // The filter is part of the BUY list, not the window.
