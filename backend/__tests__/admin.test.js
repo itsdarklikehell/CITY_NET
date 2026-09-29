@@ -6,6 +6,8 @@ import bcrypt from 'bcrypt';
 import { vi } from 'vitest';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 import adminRouteFactory from '../routes/admin.js';
+import { makeRecordAction } from '../history.js';
+import { until } from './helpers/until.js';
 import { createRequire } from 'module';
 
 // The same object the route holds. An ESM default import of a CJS module is not
@@ -23,7 +25,7 @@ const makeApp = (db) => {
   const app = express();
   app.use(express.json());
   const io = { emit: () => {} };
-  app.use('/api/admin', adminRouteFactory(db, io, { emitUpdate: () => {}, recordAction: () => {} }));
+  app.use('/api/admin', adminRouteFactory(db, io, { emitUpdate: () => {}, recordAction: makeRecordAction(db) }));
   return app;
 };
 
@@ -206,8 +208,8 @@ describe('POST /api/admin/water', () => {
       .post('/api/admin/water')
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
       .send({ points: [{ x: 0, z: 0 }] });
-    const row = await get(db, `SELECT * FROM action_history WHERE type = 'water_create'`);
-    expect(row).toBeTruthy();
+    const row = await until(() => get(db, `SELECT * FROM action_history WHERE type = 'water_create'`),
+      { label: 'water_create recorded' });
     expect(JSON.parse(row.payload).ids).toHaveLength(1);
   });
 });

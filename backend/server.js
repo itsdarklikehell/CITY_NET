@@ -21,9 +21,8 @@ const io = new Server(server, { cors: { origin: '*' } });
 const PORT = process.env.PORT || 5000;
 
 const emitUpdate = (payload = {}) => io.emit('dataUpdated', payload);
-const recordAction = (type, payload) => {
-  db.run('INSERT INTO action_history (type, payload) VALUES (?, ?)', [type, JSON.stringify(payload)]);
-};
+const { makeRecordAction, tidyHistory } = require('./history');
+const recordAction = makeRecordAction(db);
 
 const { elevatedUsers } = require('./middleware/auth');
 const helpers = { emitUpdate, recordAction };
@@ -78,4 +77,5 @@ server.listen(PORT, '0.0.0.0', () => {
     console.warn('\x1b[33m⚠️  WARNING: Default admin password in use. Set ADMIN_PASS in your .env file.\x1b[0m');
   }
   require('./startup/sanity_checks')();
+  tidyHistory(db);
 });

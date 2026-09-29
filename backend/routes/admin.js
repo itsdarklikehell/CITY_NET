@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticate } = require('../middleware/auth');
+const { deleteByIds } = require('../bulk');
 const { insertLocations } = require('../buildings/locationRows');
 
 const SECRET = process.env.JWT_SECRET;
@@ -57,23 +58,47 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.post('/undo', authenticate, (req, res) => {
-    db.get('SELECT * FROM action_history ORDER BY timestamp DESC LIMIT 1', [], (err, action) => {
+    // By id, not timestamp: timestamps are to the second, so two actions in the same second
+    // came back in either order.
+    db.get('SELECT * FROM action_history ORDER BY id DESC LIMIT 1', [], (err, action) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!action) return res.status(400).json({ error: 'No history to undo' });
 
-      const payload = JSON.parse(action.payload);
-      const finishUndo = () => {
+      const dropAction = (cb) => {
         db.run('DELETE FROM action_history WHERE id = ?', [action.id], (err) => {
           if (err) console.error('Failed to remove action from history:', err.message);
+          cb();
+        });
+      };
+      const finishUndo = (err) => {
+        if (err) {
+          console.error(`Undo of "${action.type}" failed:`, err.message);
+          return res.status(500).json({ error: err.message });
+        }
+        dropAction(() => {
           emitUpdate();
           res.json({ message: 'Undo successful', type: action.type });
         });
       };
 
+      let payload;
+      try { payload = JSON.parse(action.payload); } catch { payload = { tooLarge: true }; }
+
+      // Recorded without its copy (see history.js). Say so once and take it off the history,
+      // so the next undo reaches the change before it rather than repeating this forever.
+      if (payload.tooLarge) {
+        return dropAction(() => res.status(409).json({
+          error: 'The last change was too large to undo',
+          type: action.type,
+          tooLarge: true,
+        }));
+      }
+
+      const deleteCreated = (table) => deleteByIds(db, [{ table, ids: payload.ids }], finishUndo);
+
       db.serialize(() => {
         if (action.type === 'location_create') {
-          const placeholders = payload.ids.map(() => '?').join(',');
-          db.run(`DELETE FROM locations WHERE id IN (${placeholders})`, payload.ids, finishUndo);
+          deleteCreated('locations');
         } else if (action.type === 'location_delete') {
           // Every column the building had, not a hand-kept list of them. The list this
           // replaced predated building types, buy-back rates, AC, photos and more, and an
@@ -91,20 +116,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
               const keys = Object.keys(d);
               const fields = keys.map(k => `${k}=?`).join(',');
               const params = [...keys.map(k => d[k]), item.id];
-              db.run(`UPDATE locations SET ${fields} WHERE id=?`, params);
+              db.run(`UPDATE locations SET ${fields} WHERE id=?`, params, (e) => {
+                if (e) console.error('Undo of a batch update failed on', item.id, e.message);
+              });
             });
           });
           setTimeout(finishUndo, 100);
         } else if (action.type === 'road_create') {
-          const placeholders = payload.ids.map(() => '?').join(',');
-          db.run(`DELETE FROM roads WHERE id IN (${placeholders})`, payload.ids, finishUndo);
+          deleteCreated('roads');
         } else if (action.type === 'road_delete_all') {
           const stmt = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
           payload.data.forEach(r => stmt.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]));
           stmt.finalize(finishUndo);
         } else if (action.type === 'water_create') {
-          const placeholders = payload.ids.map(() => '?').join(',');
-          db.run(`DELETE FROM water_bodies WHERE id IN (${placeholders})`, payload.ids, finishUndo);
+          deleteCreated('water_bodies');
         } else if (action.type === 'overpass_create') {
           db.run(`DELETE FROM overpasses WHERE id = ?`, [payload.id], finishUndo);
         } else if (action.type === 'overpass_delete') {
@@ -232,7 +257,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       [JSON.stringify(points), generated ? 1 : 0], function(err) {
       if (err) return res.status(500).json({ error: err.message });
       const newId = this.lastID;
-      db.run('INSERT INTO action_history (type, payload) VALUES (?, ?)', ['water_create', JSON.stringify({ ids: [newId] })], () => {});
+      recordAction('water_create', { ids: [newId] });
       emitUpdate();
       res.json({ id: newId, message: 'Water body saved' });
     });
