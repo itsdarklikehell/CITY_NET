@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.3] - 2026-09-29
+
+Deleting a map-sized city.
+
+### Fixed
+
+- **Deleting after generating a huge city no longer crashes the server.** A city generated
+  across the whole map could not be deleted: the server stopped with `SQLITE_FULL`, and every
+  delete after that failed the same way. Large deletes now go through in pieces, still all or
+  nothing, and a delete that fails reports an error instead of taking the server down.
+
+- **The undo history no longer grows forever.** It kept a full copy of everything ever
+  deleted, which is what filled the database. It now keeps the last 50 actions. A change too
+  large to keep a copy of, like deleting or regenerating a whole city, is recorded as too large
+  to undo: UNDO says so once, and the next UNDO reaches the change before it.
+
+- **A database that already filled up recovers on restart.** Update and restart, and the
+  oversized history is trimmed on boot. Nothing else in the database is touched.
+
+- **Undoing a map-sized city generation works,** where it used to fail on the number of
+  buildings.
+
+---
+
 ## [1.14.2] - 2026-09-25
 
 The shop, on the terminal layout, with a cart.
