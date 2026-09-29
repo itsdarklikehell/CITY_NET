@@ -5,7 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.14.4] - 2026-09-29
+
+NPC sheets and hidden faces stay with the GM.
 
 ### Security
 
