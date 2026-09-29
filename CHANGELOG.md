@@ -25,6 +25,12 @@ NPC sheets and hidden faces stay with the GM.
   INIT and ROLL INIT on an NPC sheet all put the portrait in the tracker, which every
   player sees. A silhouetted NPC now enters with the NPC marker instead.
 
+- **The shop's old buy and sell messages are gone.** Since the cart, every purchase and
+  sale goes through one checkout, but the server still answered the two older one-item
+  messages. Nothing in the app sent them, yet they still moved money for anyone who sent
+  one by hand. Their tests now run against the checkout, so every case they covered is
+  still checked.
+
 ---
 
 ## [1.14.3] - 2026-09-29

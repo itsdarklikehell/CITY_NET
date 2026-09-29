@@ -46,8 +46,8 @@ import { loadUploaded, clearUploaded } from '../../sheets/uploadedCatalogues';
 /**
  * A socket that answers the way the server does.
  *
- * Buying became a round trip when the bank was wired up: the window sends `buyFromShop`,
- * the server charges, and only the receipt puts anything on the sheet. A stub that never
+ * Buying is a round trip: the window sends `checkoutShop`, the server charges, and only
+ * the reply puts anything on the sheet. A stub that never
  * replies would make every purchase here look like a no-op, so this replies - and that is
  * worth having rather than working around, because "the item arrives only once it is paid
  * for" is the property most worth keeping.
@@ -56,11 +56,11 @@ import { loadUploaded, clearUploaded } from '../../sheets/uploadedCatalogues';
  * about; the ones that care set it themselves.
  */
 const bank = { balance: 10_000_000, debt: 0 };
-/** Every buyFromShop that went out, so a test can check what was asked for. */
+/** Every thing bought at checkout, one entry each, so a test can check what was asked for. */
 let sent: any[] = [];
 /** Set to a reason to make the fake server refuse the next purchase or sale. */
 let refuseWith: string | null = null;
-/** Every sellToShop that went out. */
+/** Every sale at checkout. */
 let sold: any[] = [];
 /** Every checkoutShop, whole. */
 let checkouts: any[] = [];
@@ -85,14 +85,6 @@ const makeSocket = () => {
       // requestBankBalance is answered by show() after mount rather than here: this emit
       // happens inside the window's own mount effect, and a state update pushed from
       // inside that effect does not land.
-      if (ev === 'sellToShop') {
-        sold.push(payload);
-        act(() => (listeners.shopSale || []).forEach((f) => f(
-          refuseWith
-            ? { ok: false, reason: refuseWith }
-            : { ok: true, payout: salePayout, fromBody: saleFromBody },
-        )));
-      }
       /**
        * The cart settles everything in one message now. Recorded into the same two lists
        * the separate buy and sell messages used to fill - one entry per thing bought, one
@@ -114,14 +106,6 @@ const makeSocket = () => {
               ok: true, payout: salePayout, fromBody: saleFromBody, net: payload.expectedNet,
               settled: payload.settle ?? 'balance', balance: bank.balance - payload.expectedNet, debt: bank.debt,
             },
-        )));
-      }
-      if (ev === 'buyFromShop') {
-        sent.push(payload);
-        act(() => (listeners.shopPurchase || []).forEach((f) => f(
-          refuseWith
-            ? { ok: false, reason: refuseWith, catalogue: payload.catalogue, itemId: payload.itemId }
-            : { ok: true, catalogue: payload.catalogue, itemId: payload.itemId, settled: payload.settle ?? 'balance' },
         )));
       }
     },

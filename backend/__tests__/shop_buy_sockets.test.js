@@ -1,5 +1,9 @@
 /**
- * Buying something over the socket.
+ * Buying something over the socket: a cart holding one thing, checked out.
+ *
+ * There used to be a buyFromShop handler of its own; since the cart, buying is checkoutShop
+ * with nothing to sell, and these are its tests moved across whole so no case was lost when
+ * the old handler went. Mixed carts are in shop_checkout_sockets.test.js.
  *
  * The arithmetic is tested on its own in shop_purchase.test.js. What is tested HERE is
  * everything the handler refuses, which is the half that matters: this is the only code
@@ -82,18 +86,20 @@ const bank = async (username = 'GHOST') =>
   get(db, 'SELECT balance, debt FROM player_banks WHERE username = ?', [username]);
 
 const receipt = (emitted) =>
-  [...emitted].reverse().find((e) => e.event === 'shopPurchase');
+  [...emitted].reverse().find((e) => e.event === 'shopCheckout');
 
 const waitReceipt = (emitted) =>
-  untilValue(() => receipt(emitted), Boolean, { label: 'a shopPurchase reply' });
+  untilValue(() => receipt(emitted), Boolean, { label: 'a shopCheckout reply' });
 
 /** The heavy pistol is the running example; its price comes from the server's own table. */
 const PISTOL = 'heavy_pistol';
 const PISTOL_PRICE = prices.priceOf('weapons', PISTOL);
 
-const buy = (handlers, over = {}) => handlers['buyFromShop']({
-  locationId: gunShop, catalogue: 'weapons', itemId: PISTOL, ...over,
-});
+/** One thing, checked out. Anything else in `over` goes on the message as sent. */
+const buy = (handlers, over = {}) => {
+  const { locationId = gunShop, catalogue = 'weapons', itemId = PISTOL, ...rest } = over;
+  return handlers['checkoutShop']({ locationId, buys: [{ catalogue, itemId, qty: 1 }], ...rest });
+};
 
 describe('paying for something you can afford', () => {
   it('takes the price out of the buyer\'s account', async () => {
@@ -102,7 +108,8 @@ describe('paying for something you can afford', () => {
     buy(handlers);
 
     const out = await waitReceipt(emitted);
-    expect(out.data).toMatchObject({ ok: true, itemId: PISTOL, price: PISTOL_PRICE });
+    expect(out.data).toMatchObject({ ok: true, buyTotal: PISTOL_PRICE });
+    expect(out.data.buys).toEqual([{ catalogue: 'weapons', itemId: PISTOL, qty: 1, price: PISTOL_PRICE }]);
     expect((await bank()).balance).toBe(5000 - PISTOL_PRICE);
   });
 
@@ -131,8 +138,12 @@ describe('paying for something you can afford', () => {
   it('charges the book price, not one the client asked for', async () => {
     await fund('GHOST', 5000);
     const { handlers, emitted } = await identified();
-    // A crafted message naming its own price. The field is not read at all.
-    buy(handlers, { price: 1, cost: 1, amount: 1 });
+    // A crafted message naming its own price, on the line and on the message. Neither is read.
+    handlers['checkoutShop']({
+      locationId: gunShop,
+      buys: [{ catalogue: 'weapons', itemId: PISTOL, qty: 1, price: 1 }],
+      price: 1, cost: 1, amount: 1,
+    });
 
     await waitReceipt(emitted);
     expect((await bank()).balance).toBe(5000 - PISTOL_PRICE);
@@ -141,8 +152,7 @@ describe('paying for something you can afford', () => {
 
 describe('who pays', () => {
   it('charges the socket\'s own user, never a username in the message', async () => {
-    // The older money handlers take data.username and will drain whoever is named. This
-    // one must not: identity comes from the verified socket.
+    // Identity comes from the verified socket, never from a name in the message.
     await fund('GHOST', 5000);
     await fund('VICTIM', 9000);
     const { handlers, emitted } = await identified('GHOST');
@@ -182,7 +192,7 @@ describe('what the shop actually stocks', () => {
       `INSERT INTO locations (name, x, y, z, shape, building_type) VALUES ('Doc', 0, 0, 0, 'box', 'ripperdoc')`);
     await fund('GHOST', 999999);
     const { handlers, emitted } = await identified();
-    handlers['buyFromShop']({ locationId: r.lastID, catalogue: 'cyber_mods', itemId: 'firewalled' });
+    buy(handlers, { locationId: r.lastID, catalogue: 'cyber_mods', itemId: 'firewalled' });
 
     expect((await waitReceipt(emitted)).data).toMatchObject({ ok: false, reason: 'not_sold' });
   });
@@ -192,7 +202,7 @@ describe('what the shop actually stocks', () => {
       `INSERT INTO locations (name, x, y, z, shape, building_type) VALUES ('Bar', 0, 0, 0, 'box', 'bar')`);
     await fund('GHOST', 999999);
     const { handlers, emitted } = await identified();
-    handlers['buyFromShop']({ locationId: r.lastID, catalogue: 'weapons', itemId: PISTOL });
+    buy(handlers, { locationId: r.lastID });
 
     expect((await waitReceipt(emitted)).data).toMatchObject({ ok: false, reason: 'not_sold' });
   });
@@ -222,7 +232,7 @@ describe('when the money is not there', () => {
     buy(handlers);
 
     const out = await waitReceipt(emitted);
-    expect(out.data).toMatchObject({ ok: false, reason: 'funds', price: PISTOL_PRICE, balance: 10 });
+    expect(out.data).toMatchObject({ ok: false, reason: 'funds', net: PISTOL_PRICE });
     expect((await bank()).balance).toBe(10);
   });
 
