@@ -37,9 +37,14 @@ export interface Location {
   /**
    * A token's portrait, joined in by the location list from the linked sheet. For an NPC
    * this skips the sheet's silhouette setting, so NPC windows take the portrait from the
-   * sheet link instead - only a player's is read from here.
+   * sheet link instead - only a player's is read from here. A silhouetted NPC's comes back
+   * null to anyone but the GM.
    */
   portrait_url?: string | null;
+  /** The linked NPC sheet's silhouette setting: nonzero hides the face. */
+  portrait_shadow_filter?: number | null;
+  /** The linked NPC sheet, for the GM's initiative rolls. Only sent to the GM. */
+  sheet_data?: string | null;
   polyCount: number;
   battle_map_id: number | null;
   floor_index: number | null;

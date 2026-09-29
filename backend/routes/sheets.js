@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuthenticate } = require('../middleware/auth');
+const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
   TOKEN_SOURCES, rangedAcOf, acColumns,
@@ -505,8 +506,9 @@ module.exports = (db, io) => {
 
   // Public: name, description + portrait for enemy/friendly tokens so players
   // see who it is without exposing the full sheet (stats, etc). Admin can
-  // still build mystery manually by leaving a token unlinked or unnamed.
-  router.get('/npcs/link-public/:location_id', (req, res) => {
+  // still build mystery manually by leaving a token unlinked or unnamed. A silhouetted face
+  // is withheld here rather than darkened on the player's screen (sheets/npcPrivacy.js).
+  router.get('/npcs/link-public/:location_id', optionalAuthenticate, (req, res) => {
     db.get(
       `SELECT cs.portrait_url, json_extract(cs.data, '$.name') AS sheet_name,
               json_extract(cs.data, '$.description') AS sheet_description,
@@ -518,7 +520,7 @@ module.exports = (db, io) => {
       [req.params.location_id],
       (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(row || {});
+        res.json(redactTokenCard(row, canReadNpcSheets(req.user)) || {});
       }
     );
   });

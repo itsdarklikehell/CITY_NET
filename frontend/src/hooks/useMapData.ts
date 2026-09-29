@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Location, District, Road, WaterBody } from '../types';
 import type { SignData } from '../modules/signs';
 
@@ -10,8 +10,15 @@ export function useMapData() {
   const [overpasses, setOverpasses] = useState<any[]>([]);
   const [signs, setSigns] = useState<SignData[]>([]);
 
+  // The GM's sign-in, sent with the location list: NPC sheets (for initiative rolls) and
+  // silhouetted faces only come back to someone who may open those sheets. A ref, so signing
+  // in does not give fetchLocations a new identity for everything that depends on it.
+  const authToken = useRef('');
+  const setMapAuthToken = useCallback((token: string) => { authToken.current = token; }, []);
+
   const fetchLocations = useCallback(() => {
-    fetch(`/api/locations?_t=${Date.now()}`)
+    const headers: Record<string, string> = authToken.current ? { Authorization: `Bearer ${authToken.current}` } : {};
+    fetch(`/api/locations?_t=${Date.now()}`, { headers })
       .then(res => res.json())
       .then(data => setLocations(data))
       .catch(err => console.error('Error fetching locations:', err));
@@ -69,5 +76,6 @@ export function useMapData() {
     overpasses, setOverpasses,
     signs, setSigns,
     fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll,
+    setMapAuthToken,
   };
 }

@@ -86,7 +86,7 @@ import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
 import type { MapExportOptions } from './hooks/useMapExport';
-import { InitiativeWindow, useInitiative } from './modules/initiative';
+import { InitiativeWindow, useInitiative, npcInitiativePortrait } from './modules/initiative';
 import { getInitiativeSystem } from './modules/initiative/systems';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
@@ -113,7 +113,7 @@ function App() {
     return 'classic';
   });
   const controlsRef = useRef<any>(null);
-  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
+  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll, setMapAuthToken } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   // Picking buildings is its own mode now, not a side effect of having a district open.
   // The old flow put you into selection the moment you hit EDIT, so it was never clear
@@ -161,6 +161,16 @@ function App() {
       isPrimaryAdmin = !payload.isTemporary;
     } catch (e) { }
   }
+
+  // NPC sheets and silhouetted faces come with the map only for the GM, so the list is
+  // fetched again on signing in (to get them) and out (to drop them).
+  const mapListToken = useRef('');
+  useEffect(() => {
+    setMapAuthToken(token);
+    if (token === mapListToken.current) return;
+    mapListToken.current = token;
+    fetchLocations();
+  }, [token, setMapAuthToken, fetchLocations]);
 
   // Check env var status on admin login
   useEffect(() => {
@@ -1775,7 +1785,7 @@ function App() {
                 locations.filter((l: any) => l.shape === 'enemy_rhombus' && inScene(l)).forEach((l: any) => {
                   const sheet = l.sheet_data ? (typeof l.sheet_data === 'string' ? JSON.parse(l.sheet_data) : l.sheet_data) : undefined;
                   const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(sheet, initiativeRollOptions);
-                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `ENEMY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `ENEMY_${l.id}`, portraitUrl: npcInitiativePortrait(l.portrait_url, l.portrait_shadow_filter), score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
                 });
               }}
               onRollFriendlies={() => {
@@ -1785,7 +1795,7 @@ function App() {
                 locations.filter((l: any) => l.shape === 'friendly_rhombus' && inScene(l)).forEach((l: any) => {
                   const sheet = l.sheet_data ? (typeof l.sheet_data === 'string' ? JSON.parse(l.sheet_data) : l.sheet_data) : undefined;
                   const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(sheet, initiativeRollOptions);
-                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `FRIENDLY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, isFriendly: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `FRIENDLY_${l.id}`, portraitUrl: npcInitiativePortrait(l.portrait_url, l.portrait_shadow_filter), score, breakdown, diceResults, exploded, isNpc: true, isFriendly: true, floorIndex: activeBattleMapData?.currentFloorIndex });
                 });
               }}
               />
@@ -2551,7 +2561,7 @@ function App() {
                             initiative.submitRoll({
                               id: `npc:${selectedLocation.id}`,
                               name: npcName,
-                              portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
+                              portraitUrl: npcInitiativePortrait((selectedLocation as any).portrait_url, (selectedLocation as any).portrait_shadow_filter),
                               score,
                               breakdown: `MANUAL(${score}) = ${score}`,
                               diceResults: {},
