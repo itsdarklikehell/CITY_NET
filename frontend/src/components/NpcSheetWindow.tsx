@@ -6,6 +6,7 @@ import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
 import type { SheetFieldValue } from '../sheets/types';
+import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 
 // Admin view/edit of an NPC or player sheet. Unlike the player window
 // (socket-based, self-only), this goes through the admin REST routes:
@@ -194,7 +195,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
               title="Roll 1d20 and add to initiative (appended to bottom)"
               className="win95-close-btn"
               style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
-              onClick={() => onRollInitiative(sheet?.portrait_url ?? undefined)}
+              onClick={() => onRollInitiative(npcInitiativePortrait(sheet?.portrait_url, sheet?.data?.portrait_shadow_filter as number | undefined))}
             >
               ROLL INIT
             </button>

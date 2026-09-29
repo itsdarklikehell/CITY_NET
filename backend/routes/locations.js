@@ -9,6 +9,7 @@ const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { readPct } = require('../shops/buyback');
 const sheetSlots = require('../shops/sheetSlots');
 const { selectByIds, deleteByIds } = require('../bulk');
+const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -85,10 +86,14 @@ const upsertLibrary = (db, loc) => {
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
 
-  router.get('/', (req, res) => {
+  // Public - every player loads the map - so an NPC's sheet and a silhouetted face go only to
+  // those who may open the sheet anyway (sheets/npcPrivacy.js).
+  router.get('/', optionalAuthenticate, (req, res) => {
+    const canRead = canReadNpcSheets(req.user);
     db.all(
       `SELECT l.*, COALESCE(npc_cs.portrait_url, CASE WHEN l.shape = 'rhombus' THEN player_cs.portrait_url END) AS portrait_url,
-              npc_cs.data AS sheet_data
+              npc_cs.data AS sheet_data,
+              json_extract(npc_cs.data, '$.portrait_shadow_filter') AS portrait_shadow_filter
        FROM locations l
        LEFT JOIN npc_sheet_links nsl ON nsl.location_id = l.id
        LEFT JOIN character_sheets npc_cs ON npc_cs.id = nsl.sheet_id
@@ -100,7 +105,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       [],
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+        res.json(rows.map(row => redactLocation(row, canRead)));
       }
     );
   });

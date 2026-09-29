@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.4] - 2026-09-29
+
+NPC sheets and hidden faces stay with the GM.
+
+### Security
+
+- **NPC sheets no longer go to every player.** The map list sent each player the whole
+  sheet of every NPC linked to a token: stats, description, GM notes, everything. It now
+  only goes to the GM, or someone the GM has given editing rights, who can open those
+  sheets anyway. The GM's initiative rolls still read it.
+
+- **A silhouetted NPC's face is actually hidden.** The silhouette was a filter on the
+  player's own screen, with the real portrait one right-click away. Players now get no
+  portrait at all for a silhouetted NPC, and the token window shows the token in its
+  side's color instead. The GM still sees the silhouetted portrait.
+
+- **Initiative no longer shows a silhouetted face.** Rolling enemies or friendlies, ADD TO
+  INIT and ROLL INIT on an NPC sheet all put the portrait in the tracker, which every
+  player sees. A silhouetted NPC now enters with the NPC marker instead.
+
+- **The shop's old buy and sell messages are gone.** Since the cart, every purchase and
+  sale goes through one checkout, but the server still answered the two older one-item
+  messages. Nothing in the app sent them, yet they still moved money for anyone who sent
+  one by hand. Their tests now run against the checkout, so every case they covered is
+  still checked.
+
+---
+
 ## [1.14.3] - 2026-09-29
 
 Deleting a map-sized city.

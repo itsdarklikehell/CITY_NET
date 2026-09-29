@@ -283,3 +283,14 @@ describe('who pays', () => {
     expect((await bank()).balance).toBe(5000);
   });
 });
+
+describe('the only way in', () => {
+  it('is the cart: the old one-item buy and sell events are not listened for', async () => {
+    // Nothing in the app sent them after the cart, but they still moved money for anyone
+    // who sent one by hand - two more doors to keep locked for no use.
+    const { handlers } = await identified();
+    expect(handlers).not.toHaveProperty('buyFromShop');
+    expect(handlers).not.toHaveProperty('sellToShop');
+    expect(handlers).toHaveProperty('checkoutShop');
+  });
+});

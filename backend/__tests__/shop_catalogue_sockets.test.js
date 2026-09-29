@@ -103,6 +103,10 @@ const last = (emitted, event) => [...emitted].reverse().find((e) => e.event === 
 const waitFor = (emitted, event) =>
   untilValue(() => last(emitted, event), Boolean, { label: event });
 
+/** Buy one of something at the gun shop: a one-line cart, checked out. */
+const buy = (handlers, itemId) =>
+  handlers['checkoutShop']({ locationId: gunShop, buys: [{ catalogue: 'weapons', itemId, qty: 1 }] });
+
 const ZIP_GUN = [
   '[weapons]',
   'name, price, dmg, skill',
@@ -233,10 +237,10 @@ describe('buying and selling something a GM added', () => {
     await fund('GHOST', 1000);
     const { handlers, emitted } = await player();
 
-    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'zip_gun' });
-    const out = await waitFor(emitted, 'shopPurchase');
+    buy(handlers, 'zip_gun');
+    const out = await waitFor(emitted, 'shopCheckout');
 
-    expect(out.data).toMatchObject({ ok: true, price: 15 });
+    expect(out.data).toMatchObject({ ok: true, buyTotal: 15 });
     expect((await bank()).balance).toBe(985);
   });
 
@@ -247,11 +251,11 @@ describe('buying and selling something a GM added', () => {
     await fund('GHOST', 0);
     const { handlers, emitted } = await player();
 
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [{ catalogue: 'weapons', id: 'zip_gun', qty: 1 }],
+      sells: [{ catalogue: 'weapons', id: 'zip_gun', qty: 1 }],
     });
-    const out = await waitFor(emitted, 'shopSale');
+    const out = await waitFor(emitted, 'shopCheckout');
 
     // 15 at the default 45% is 6, rounded down from 6.75.
     expect(out.data).toMatchObject({ ok: true, payout: 6 });
@@ -266,8 +270,8 @@ describe('buying and selling something a GM added', () => {
     await fund('GHOST', 1000);
     const { handlers, emitted } = await player();
 
-    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'heavy_pistol' });
-    expect((await waitFor(emitted, 'shopPurchase')).data.price).toBe(250);
+    buy(handlers, 'heavy_pistol');
+    expect((await waitFor(emitted, 'shopCheckout')).data.buyTotal).toBe(250);
   });
 });
 
@@ -310,8 +314,8 @@ describe('a shop in another system\'s game', () => {
     await fund('GHOST', 1000);
     const { handlers, emitted } = await player();
 
-    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'heavy_pistol' });
-    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: false, reason: 'price' });
+    buy(handlers, 'heavy_pistol');
+    expect((await waitFor(emitted, 'shopCheckout')).data).toMatchObject({ ok: false, reason: 'price' });
     expect((await bank()).balance).toBe(1000);
   });
 
@@ -323,8 +327,8 @@ describe('a shop in another system\'s game', () => {
     const { handlers, emitted } = await player();
     store.clear();
 
-    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'heavy_pistol' });
-    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: false, reason: 'price' });
+    buy(handlers, 'heavy_pistol');
+    expect((await waitFor(emitted, 'shopCheckout')).data).toMatchObject({ ok: false, reason: 'price' });
     expect(store.systemLoaded()).toBe('cyberpunk_red');
   });
 
@@ -341,15 +345,17 @@ describe('a shop in another system\'s game', () => {
     await fund('GHOST', 1000);
     const { handlers, emitted } = await player();
 
-    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'militech_unity' });
-    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: true, price: 100 });
+    buy(handlers, 'militech_unity');
+    expect((await waitFor(emitted, 'shopCheckout')).data).toMatchObject({ ok: true, buyTotal: 100 });
     expect((await bank()).balance).toBe(900);
 
-    handlers['sellToShop']({
+    // Both replies are shopCheckout, so the buy's is cleared before waiting for the sale's.
+    emitted.length = 0;
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [{ catalogue: 'weapons', id: 'militech_unity', qty: 1 }],
+      sells: [{ catalogue: 'weapons', id: 'militech_unity', qty: 1 }],
     });
-    expect((await waitFor(emitted, 'shopSale')).data).toMatchObject({ ok: true, payout: 45 });
+    expect((await waitFor(emitted, 'shopCheckout')).data).toMatchObject({ ok: true, payout: 45 });
     await untilValue(() => bank(), (b) => b && b.balance === 945, { label: 'credited' });
 
     const sheet = JSON.parse((await get(db,

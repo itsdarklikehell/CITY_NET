@@ -340,7 +340,7 @@ CITY_NET/
 │   │   └── rateLimit.js        # A sliding per-caller ceiling, for the one open route that spends our outbound requests on an anonymous caller's say-so. Bounded in memory, since the key is whoever is asking; evicts the least recently seen, so it forgives rather than blocks
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase and a stable failure code and nothing anyone said to us — it is unauthenticated by necessity, so the compose output that used to ride along on it now stays in the log file, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
-│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
+│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for the GM's NPC initiative rolls, and withholds it (and a silhouetted NPC's portrait) from everyone else via sheets/npcPrivacy.js; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
 │   │   ├── battle_maps.js      # Battle map upload and management. Streams to a temporary file and hashes in chunks rather than buffering, so a 250MB animated map costs disk rather than RAM, then renames to the content hash — the same map on a dozen locations is one file. Sweeps partial uploads left by a process that died mid-transfer, since those are the one case the handler's own cleanup cannot reach. Accepts what the scene can actually draw, stills and loops alike, since a format the renderer cannot decode uploads perfectly and then shows nothing
 │   │   ├── buildingDetails.js  # A building's photo and the GM's notes, mounted under /api/locations/:id. Photo upload and remove, and the notes both ways, are main-admin only - a player granted editing rights holds a token that passes `authenticate` and is refused here. The notes never join the public location list
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
@@ -362,6 +362,7 @@ CITY_NET/
 │   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
 │   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll; vehicle mounts read through the same getWeapon via a field prefix; vehicle rules (AC moving vs stationary, Armour Rating as damage reduction, destruction, the -4 for firing from a moving vehicle) plus readOccupancy/getVehicle, which resolve where a character is and what is standing between them and the shot
 │   │   ├── attackSr6.js        # SR6 combat resolution — attack pool (hits/glitch), AR vs Armor Rating DV modifier, potential damage (soak manual)
+│   │   ├── npcPrivacy.js       # What of an NPC's sheet a caller may see. The map list and token card are public, so the sheet and a silhouetted face go only to the GM or a granted editor, who can open the sheet anyway; everyone else gets the token drawn in its side's color
 │   │   ├── identity.js         # Sheet = source of truth for player identity: mirrors name/description to tokens, display-name cache for rolls; also drives the vehicle mirror, so every caller that saves a sheet refreshes it
 │   │   ├── vehicleSeats.js     # Seats derived from the book's Crew number — ids are positional (driver, seat2..seatN) so the server needs only the count to validate one. Guns are deliberately not seats: a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once
 │   │   ├── cyberware.js        # Chrome as rows, and the three ways it arrives. Reads a Companion export from `type` rather than `name` — real exports leave the name blank, which is why the import brought back nothing at all — and takes the humanity cost with it. Also parses the free-text field this replaced, and gathers the printed form's numbered boxes. Nothing here knows where a piece is installed, because no source does
@@ -431,6 +432,7 @@ CITY_NET/
 │       ├── sockets.customdice.test.js  # Roll handler: DB vs builtin resolution, numeric summing, count clamp, forged-payload rejection
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
 │       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields, GET /own player self-fetch)
+│       ├── npc_privacy.test.js         # The map list and token card as anonymous, player and revoked-editor callers see them: no NPC sheet, no silhouetted face, even in the raw response text; the GM and a granted editor still get both
 │       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)
 │       ├── cpr_attack.test.js          # CP:R attack module (to-hit, armor, shield, crits, death saves)
 │       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
@@ -647,6 +649,7 @@ CITY_NET/
 │   │   │       │   └── random.ts               # cryptoRng — uniform [0,1) from crypto.getRandomValues; shared by every system
 │   │   │       └── __tests__/
 │   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R/CWN formulas, extra dice, breakdown format, diceResults shape
+│   │   │           ├── npcPortrait.test.ts      # A silhouetted NPC enters initiative with no portrait, since the tracker goes to every player
 │   │   │           ├── random.test.ts           # Browser cryptoRng range/uniqueness; every system exercised on its default rng
 │   │   │           └── useInitiative.test.ts    # Hook state transitions, socket emit payloads
 │   │   ├── context/
@@ -656,13 +659,14 @@ CITY_NET/
 │   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
-│   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
+│   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching. Sends the GM's sign-in with the location list, held in a ref so signing in does not give fetchLocations a new identity
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
 │   │   │   ├── useEnemyVehicles.ts # The GM's enemy vehicles, and the tokens on the map level that could fill their seats. Asked for rather than pushed, and refused to anyone but the GM — so a player's client never holds enemy pools or armour at all, which is what keeps "what may players see" from being a question the feature has to answer
 │   │   │   ├── useVehicleRoster.ts # Every vehicle in play and who is in which seat. Held outside the window because the buttons that open it need to know whether the table owns a vehicle at all — one subscription, so the two cannot disagree. Takes the socket ref, not its current value: a ref is not reactive, and reading it before the socket exists binds to nothing forever
 │   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
+│   │   │       ├── useMapData.test.ts                    # The location list asks anonymously until the GM signs in, then with their token, and again without after sign-out
 │   │   │       ├── useMapExport.test.ts                  # Recorder codec fallback (vp9 → vp8 → webm → default), export camera framing, grid fade restore, countdown drift under starved timers
 │   │   │       ├── useCustomDice.test.ts                 # Loading, system/GM merge order, locked flag, broadcast handling, mutation auth and errors
 │   │   │       ├── useVehicleRoster.test.tsx             # Binds when the socket turns up, empties on a system switch, re-asks on a sheet save

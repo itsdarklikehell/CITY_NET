@@ -1,5 +1,9 @@
 /**
- * Selling over the socket.
+ * Selling over the socket: a cart holding only things to sell, checked out.
+ *
+ * There used to be a sellToShop handler of its own; since the cart, selling is checkoutShop
+ * with nothing to buy, and these are its tests moved across whole so no case was lost when
+ * the old handler went. Mixed carts are in shop_checkout_sockets.test.js.
  *
  * The arithmetic and the sheet patch are tested on their own in shop_sell.test.js. What is
  * tested HERE is that the two halves actually happen together: the sheet really loses the
@@ -80,9 +84,9 @@ const sheet = async (username = 'GHOST') => JSON.parse((await get(db,
 const bank = async (username = 'GHOST') =>
   get(db, 'SELECT balance FROM player_banks WHERE username = ?', [username]);
 
-const result = (emitted) => [...emitted].reverse().find((e) => e.event === 'shopSale');
+const result = (emitted) => [...emitted].reverse().find((e) => e.event === 'shopCheckout');
 const waitResult = (emitted) =>
-  untilValue(() => result(emitted), Boolean, { label: 'a shopSale reply' });
+  untilValue(() => result(emitted), Boolean, { label: 'a shopCheckout reply' });
 
 describe('selling something', () => {
   it('takes it off the sheet and puts the money in the bank', async () => {
@@ -91,9 +95,9 @@ describe('selling something', () => {
     await fund('GHOST', 1000);
     const { handlers, emitted } = await identified();
 
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }],
+      sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }],
     });
 
     const out = await waitResult(emitted);
@@ -109,7 +113,7 @@ describe('selling something', () => {
     await seed({ weapon1_name: 'Heavy Pistol' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
     await waitResult(emitted);
 
     /**
@@ -134,7 +138,7 @@ describe('selling something', () => {
     await seed({ weapon1_name: 'Heavy Pistol' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
 
     expect((await waitResult(emitted)).data.payout).toBe(200);
   });
@@ -143,9 +147,9 @@ describe('selling something', () => {
     await seed({ weapon1_name: 'Heavy Pistol', weapon2_name: 'Rifle' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [
+      sells: [
         { catalogue: 'weapons', id: 'heavy_pistol', qty: 1 },
         { catalogue: 'weapons', id: 'rifle', qty: 1 },
       ],
@@ -164,9 +168,9 @@ describe('what it will not do', () => {
     await seed({ weapon1_name: 'Heavy Pistol' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1, price: 999999, each: 999999 }],
+      sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1, price: 999999, each: 999999 }],
     });
 
     expect((await waitResult(emitted)).data.payout).toBe(90);
@@ -177,7 +181,7 @@ describe('what it will not do', () => {
     await seed({});
     await fund('GHOST', 500);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
 
     expect((await waitResult(emitted)).data).toMatchObject({ ok: false, reason: 'not_owned' });
     expect((await bank()).balance).toBe(500);
@@ -188,7 +192,7 @@ describe('what it will not do', () => {
     await seed({ cyberware: [{ name: 'Cranial Jack', placed: true }] });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }] });
 
     expect((await waitResult(emitted)).data).toMatchObject({ ok: false, reason: 'not_sold' });
     expect((await sheet()).cyberware).toHaveLength(1);
@@ -201,10 +205,10 @@ describe('what it will not do', () => {
     await fund('VICTIM', 0);
     const { handlers, emitted } = await identified('GHOST');
 
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
       username: 'VICTIM',
-      items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }],
+      sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }],
     });
 
     await waitResult(emitted);
@@ -217,7 +221,7 @@ describe('what it will not do', () => {
     await seed({ weapon1_name: 'Heavy Pistol' });
     await fund('GHOST', 0);
     const { handlers, emitted } = boot(db);
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
     await drain(db);
 
     expect(result(emitted)).toBeUndefined();
@@ -228,9 +232,9 @@ describe('what it will not do', () => {
     await seed({ weapon1_name: 'Heavy Pistol', weapon2_name: 'Rifle' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: gunShop,
-      items: [
+      sells: [
         { catalogue: 'weapons', id: 'heavy_pistol', qty: 1 },
         { catalogue: 'weapons', id: 'rifle', qty: 9 },
       ],
@@ -254,7 +258,7 @@ describe('chrome out of a body', () => {
     await seed({ weapon1_name: 'Heavy Pistol' });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    handlers['checkoutShop']({ locationId: gunShop, sells: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
     await waitResult(emitted);
 
     const update = [...emitted].reverse().find((e) => e.event === 'sheetUpdated');
@@ -270,9 +274,9 @@ describe('chrome out of a body', () => {
     await seed({ cyberware: [{ name: 'Cranial Jack', placed: true }] });
     await fund('GHOST', 0);
     const { handlers, emitted } = await identified();
-    handlers['sellToShop']({
+    handlers['checkoutShop']({
       locationId: r.lastID,
-      items: [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }],
+      sells: [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }],
     });
 
     const out = await waitResult(emitted);
