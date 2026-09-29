@@ -8,6 +8,7 @@ const { DEFAULT_SYSTEM } = require('../sheets/templates');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { readPct } = require('../shops/buyback');
 const sheetSlots = require('../shops/sheetSlots');
+const { selectByIds, deleteByIds } = require('../bulk');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -277,11 +278,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           const roadIds = roads.map(r => r.id);
           const overpassIds = overpasses.map(o => o.id);
 
-          const del = (table, list) => {
-            if (list.length === 0) return;
-            db.run(`DELETE FROM ${table} WHERE id IN (${list.map(() => '?').join(',')})`, list);
-          };
-
           // Only water the generator made. A lake the GM drew is hand-placed work and
           // survives a regenerate exactly as a named structure does.
           db.all('SELECT * FROM water_bodies WHERE generated = 1', [], (err4, waterRows) => {
@@ -298,28 +294,29 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             });
             const waterIds = water.map(w => w.id);
 
-            db.serialize(() => {
-              db.run('BEGIN TRANSACTION');
-              del('locations', ids);
-              del('roads', roadIds);
-              del('overpasses', overpassIds);
-              del('water_bodies', waterIds);
-              db.run('COMMIT', (err5) => {
-                if (err5) return res.status(500).json({ error: err5.message });
-                recordAction('region_purge', {
-                  locations: doomed,
-                  roads,
-                  overpasses,
-                  water,
-                });
-                emitUpdate();
-                res.json({
-                  locations: ids.length,
-                  roads: roadIds.length,
-                  overpasses: overpassIds.length,
-                  water: waterIds.length,
-                  keptNamed,
-                });
+            deleteByIds(db, [
+              { table: 'locations', ids },
+              { table: 'roads', ids: roadIds },
+              { table: 'overpasses', ids: overpassIds },
+              { table: 'water_bodies', ids: waterIds },
+            ], (err5) => {
+              if (err5) {
+                console.error('Region purge failed:', err5.message);
+                return res.status(500).json({ error: err5.message });
+              }
+              recordAction('region_purge', {
+                locations: doomed,
+                roads,
+                overpasses,
+                water,
+              });
+              emitUpdate();
+              res.json({
+                locations: ids.length,
+                roads: roadIds.length,
+                overpasses: overpassIds.length,
+                water: waterIds.length,
+                keptNamed,
               });
             });
           });
@@ -419,11 +416,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Invalid IDs provided' });
     }
-    const placeholders = ids.map(() => '?').join(',');
-    db.all(`SELECT * FROM locations WHERE id IN (${placeholders})`, ids, (err, rows) => {
+    selectByIds(db, 'locations', ids, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      db.run(`DELETE FROM locations WHERE id IN (${placeholders})`, ids, (err) => {
-        if (err) return res.status(500).json({ error: err.message });
+      deleteByIds(db, [{ table: 'locations', ids }], (err) => {
+        if (err) {
+          console.error('Batch delete failed:', err.message);
+          return res.status(500).json({ error: err.message });
+        }
         recordAction('location_delete', { data: rows });
         emitUpdate();
         res.json({ message: 'Batch deleted' });
