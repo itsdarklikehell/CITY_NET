@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Security
+
+- **Database backups no longer go into the Docker image.** The server image left out the
+  database itself, but not the copies beside it: `city.db.bak` and the backups made before a
+  migration were built into the image, and with them every account, sheet and bank. Those, and
+  the backend's test files, are now left out.
+
+---
+
 ## [1.14.4] - 2026-09-29
 
 NPC sheets and hidden faces stay with the GM.
